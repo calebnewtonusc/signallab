@@ -1,0 +1,20 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.venv/
+.coverage
+dist/
+build/
+artifacts/
+
+# Node / Next (web/ has its own but keep these in case)
+node_modules/
+.next/
+.turbo/
+*.log
+
+.DS_Store
+.env
+.env.*
+!.env.example
