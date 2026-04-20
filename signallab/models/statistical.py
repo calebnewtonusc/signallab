@@ -71,43 +71,63 @@ class ExponentialSmoothingForecaster:
             self._sigma = 1.0
             return self
 
-        def _sigmoid(x: np.ndarray) -> np.ndarray:
-            return 1.0 / (1.0 + np.exp(-np.clip(x, -30.0, 30.0)))
+        def _sigmoid(x: np.ndarray, lo: float = 0.0, hi: float = 1.0) -> np.ndarray:
+            return lo + (hi - lo) / (1.0 + np.exp(-np.clip(x, -30.0, 30.0)))
+
+        def _unpack(params: np.ndarray) -> tuple[float, float, float, float]:
+            a = float(_sigmoid(params[0]))
+            b = float(_sigmoid(params[1]))
+            g = float(_sigmoid(params[2]))
+            if self.damped:
+                phi = float(_sigmoid(params[3], lo=0.80, hi=0.999))
+            else:
+                phi = 1.0
+            return a, b, g, phi
 
         def loss(params: np.ndarray) -> float:
-            a, b, g = _sigmoid(params[:3])
-            phi = self.phi
-            _, _, _, sse = self._state_iter(y, float(a), float(b), float(g), phi)
+            a, b, g, phi = _unpack(params)
+            _, _, _, sse = self._state_iter(y, a, b, g, phi)
             return sse / max(1, len(y))
 
-        x0 = np.array([0.0, -1.0, -1.0])
+        if self.damped:
+            x0 = np.array([0.0, -1.0, -1.0, 2.0])
+        else:
+            x0 = np.array([0.0, -1.0, -1.0])
         res = minimize(loss, x0, method="Nelder-Mead", options={"xatol": 1e-4, "fatol": 1e-4})
-        params = res.x
-        a, b, g = _sigmoid(params[:3]).tolist()
-        self.alpha, self.beta, self.gamma = float(a), float(b), float(g)
+        a, b, g, phi = _unpack(res.x)
+        self.alpha, self.beta, self.gamma, self.phi = a, b, g, phi
         level, trend, season, sse = self._state_iter(
             y, self.alpha, self.beta, self.gamma, self.phi
         )
         self._level = level
         self._trend = trend
         self._season = season
-        self._sigma = float(np.sqrt(sse / max(1, len(y) - 2)))
+        dof = max(1, len(y) - (4 if self.damped else 3))
+        self._sigma = float(np.sqrt(sse / dof))
         return self
 
     def predict(self, horizon: int, alpha: float = 0.1) -> Forecast:
         h = horizon
         s = self.seasonality
         phi = self.phi
-        trends = np.zeros(h)
+        trend_factor = np.zeros(h)
         for i in range(h):
-            trends[i] = (phi ** (i + 1) - phi) / (phi - 1.0) if phi != 1.0 else (i + 1)
-        means = self._level + trends * self._trend
+            trend_factor[i] = (
+                (phi * (1.0 - phi ** (i + 1)) / (1.0 - phi)) if phi != 1.0 else (i + 1)
+            )
+        means = self._level + trend_factor * self._trend
         if s > 0:
             means = means + np.array([self._season[i % s] for i in range(h)])
         steps = np.arange(1, h + 1)
-        sigma = self._sigma * np.sqrt(steps)
+        psi_sq = np.zeros(h)
+        psi_sq[0] = 1.0
+        for i in range(1, h):
+            psi_sq[i] = psi_sq[i - 1] + (self.alpha + self.beta * phi) ** 2
+        sigma = self._sigma * np.sqrt(psi_sq)
         z = _z(alpha)
-        return Forecast(mean=means, lower=means - z * sigma, upper=means + z * sigma, sigma=sigma)
+        return Forecast(
+            mean=means, lower=means - z * sigma, upper=means + z * sigma, sigma=sigma
+        )
 
 
 class ThetaForecaster:

@@ -52,6 +52,8 @@ def benchmark(
     shift_at: int = typer.Option(0, help="Inject distribution shift at this index (0 = none)."),
     shift_kind: str = typer.Option("level"),
     shift_magnitude: float = typer.Option(3.0),
+    conformal: bool = typer.Option(True, help="Use split conformal prediction intervals."),
+    calibration_folds: int = typer.Option(10, help="Calibration folds for conformal quantile."),
     outdir: str = typer.Option("artifacts/run", help="Where to write csvs and json."),
 ) -> None:
     """Run a multi-model walk-forward benchmark and write artifacts."""
@@ -85,6 +87,8 @@ def benchmark(
         models=models,
         alpha=alpha,
         seasonality=seasonality if seasonality > 1 else 1,
+        conformal=conformal,
+        calibration_folds=calibration_folds,
     )
     result = experiment.run()
 

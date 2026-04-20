@@ -82,9 +82,12 @@ class LagRegressionForecaster:
             target_row = df.iloc[len(history)]
             feats = target_row.drop("y")
             if feats.isna().any():
-                preds[h] = history[-1]
-            else:
-                preds[h] = float(self._regressor.predict(feats.to_numpy().reshape(1, -1))[0])
+                missing = [c for c in feats.index if pd.isna(feats[c])]
+                raise ValueError(
+                    f"feature NaN at recursive step {h + 1}: {missing}. "
+                    "Reduce max lag or rolling window, or provide more history."
+                )
+            preds[h] = float(self._regressor.predict(feats.to_numpy().reshape(1, -1))[0])
             history.append(preds[h])
         steps = np.arange(1, horizon + 1)
         sigma = self._sigma * np.sqrt(steps)

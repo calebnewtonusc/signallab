@@ -17,6 +17,8 @@ def main() -> None:
         models=_default_models(seasonality=12),
         alpha=0.1,
         seasonality=12,
+        conformal=True,
+        calibration_folds=10,
     )
     result = experiment.run()
     print_overall(result)

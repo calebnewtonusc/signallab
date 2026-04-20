@@ -12,6 +12,7 @@ Time-series forecasting and simulation pipeline. Walk-forward validation, calibr
 2. **Walk-forward splits** — expanding or rolling windows, configurable horizon and step, max-fold cap.
 3. **Model zoo** — `NaiveForecaster`, `SeasonalNaiveForecaster`, `DriftForecaster`, `MovingAverageForecaster`, `ExponentialSmoothingForecaster` (Holt-Winters), `ThetaForecaster`, and `LagRegressionForecaster` (recursive, sklearn-style). Every model returns mean, lower, upper, sigma.
 4. **Metrics + calibration** — MAE, RMSE, MAPE, sMAPE, MASE, interval coverage, average width, pinball loss, PIT-based calibration error, rolling coverage.
+5. **Split conformal prediction** — per-horizon empirical residual quantiles replace the parametric sigma widths. Turn it on with `conformal=True` in `Experiment` or `--conformal` on the CLI.
 
 ## Quick start
 

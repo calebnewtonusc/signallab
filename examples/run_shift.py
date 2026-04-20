@@ -46,7 +46,13 @@ def main() -> None:
         ),
     }
     experiment = Experiment(
-        series=series, splitter=splitter, models=models, alpha=0.1, seasonality=7
+        series=series,
+        splitter=splitter,
+        models=models,
+        alpha=0.1,
+        seasonality=7,
+        conformal=True,
+        calibration_folds=10,
     )
     result = experiment.run()
     print_overall(result)

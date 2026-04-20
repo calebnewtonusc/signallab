@@ -10,6 +10,7 @@ import numpy as np
 import pandas as pd
 
 from signallab.calibration import calibration_error, pit_values, rolling_coverage
+from signallab.conformal import apply_conformal_widths, compute_conformal_widths
 from signallab.metrics import interval_metrics, point_metrics
 from signallab.models.base import Forecaster
 from signallab.models.ml import LagRegressionForecaster
@@ -88,6 +89,8 @@ class Experiment:
     alpha: float = 0.1
     seasonality: int = 1
     coverage_window: int = 30
+    conformal: bool = False
+    calibration_folds: int = 10
 
     def run(self) -> ExperimentResult:
         if not isinstance(self.series.index, pd.DatetimeIndex):
@@ -107,6 +110,9 @@ class Experiment:
             "alpha": float(self.alpha),
             "seasonality": int(self.seasonality),
             "models": list(self.models.keys()),
+            "n_folds": int(self.splitter.n_folds(n)),
+            "conformal": bool(self.conformal),
+            "calibration_folds": int(self.calibration_folds) if self.conformal else 0,
         }
 
         per_model_rows: dict[str, list[FoldRecord]] = {name: [] for name in self.models}
@@ -123,6 +129,17 @@ class Experiment:
                 else:
                     model.fit(y_train)
                 forecast = model.predict(self.splitter.horizon, alpha=self.alpha)
+                if self.conformal:
+                    calib = compute_conformal_widths(
+                        y_train=y_train,
+                        index=train_index,
+                        factory=factory,
+                        horizon=self.splitter.horizon,
+                        alpha=self.alpha,
+                        calibration_folds=self.calibration_folds,
+                    )
+                    if calib.n_calibration_folds >= 2:
+                        forecast = apply_conformal_widths(forecast, calib.widths)
                 for step in range(self.splitter.horizon):
                     rec = FoldRecord(
                         model=name,

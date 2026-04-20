@@ -19,6 +19,7 @@ import { BenchmarkTable } from "@/components/BenchmarkTable";
 import { ForecastChart } from "@/components/ForecastChart";
 import { HorizonChart } from "@/components/HorizonChart";
 import { CoverageChart } from "@/components/CoverageChart";
+import { ReliabilityChart } from "@/components/ReliabilityChart";
 import airlineResults from "./data/airline.json";
 import shiftResults from "./data/shift.json";
 import airlineRecords from "./data/airline_records.json";
@@ -39,6 +40,14 @@ const BENCHMARK_MODELS = [
   "theta",
   "lag_ridge",
 ];
+
+const SHIFT_INDEX_IN_SERIES = 220;
+
+function computeShiftFoldIndex(meta: ResultsFile["meta"]): number {
+  const offset = SHIFT_INDEX_IN_SERIES - meta.initial_train;
+  if (offset <= 0) return 0;
+  return Math.max(0, Math.floor(offset / meta.step));
+}
 
 const CLI_SNIPPET = `# Run the end-to-end benchmark on a monthly series
 signallab benchmark \\
@@ -129,18 +138,28 @@ export default function Home() {
             <Reveal delay={320}>
               <div className="mt-16 grid grid-cols-2 md:grid-cols-4 gap-px rounded-2xl overflow-hidden border border-zinc-800 bg-zinc-800">
                 {[
-                  { label: "Baselines benchmarked", value: "7", icon: Boxes },
+                  {
+                    label: "Baselines benchmarked",
+                    value: String(airline.meta.models.length),
+                    icon: Boxes,
+                  },
                   {
                     label: "Walk-forward folds",
-                    value: `${airline.meta.n_obs - airline.meta.initial_train}+`,
+                    value: String(airline.meta.n_folds),
                     icon: GitBranch,
                   },
                   {
-                    label: "Coverage tracked",
+                    label: "Target coverage",
                     value: `${((1 - airline.meta.alpha) * 100).toFixed(0)}%`,
                     icon: Target,
                   },
-                  { label: "Shift scenarios", value: "3", icon: Waves },
+                  {
+                    label: "Conformal calibration",
+                    value: airline.meta.conformal
+                      ? `${airline.meta.calibration_folds} folds`
+                      : "off",
+                    icon: Waves,
+                  },
                 ].map((stat) => (
                   <div
                     key={stat.label}
@@ -173,7 +192,8 @@ export default function Home() {
                     Live benchmark output
                   </div>
                   <h2 className="text-3xl md:text-4xl font-semibold tracking-tight text-white">
-                    Airline passengers, 89 walk-forward folds, h = 6.
+                    Airline passengers, {airline.meta.n_folds} walk-forward
+                    folds, h = {airline.meta.horizon}.
                   </h2>
                   <p className="mt-4 text-zinc-400 text-base leading-relaxed">
                     Every metric below is recomputed from the artifacts
@@ -185,16 +205,19 @@ export default function Home() {
                   </p>
                 </div>
                 <div className="flex flex-wrap gap-2 text-xs">
-                  {["expanding window", "α = 0.10", "seasonality = 12"].map(
-                    (tag) => (
-                      <span
-                        key={tag}
-                        className="px-2.5 py-1 rounded-full bg-zinc-900 border border-zinc-800 text-zinc-400"
-                      >
-                        {tag}
-                      </span>
-                    ),
-                  )}
+                  {[
+                    `${airline.meta.mode} window`,
+                    `α = ${airline.meta.alpha.toFixed(2)}`,
+                    `seasonality = ${airline.meta.seasonality}`,
+                    airline.meta.conformal ? "conformal" : "parametric",
+                  ].map((tag) => (
+                    <span
+                      key={tag}
+                      className="px-2.5 py-1 rounded-full bg-zinc-900 border border-zinc-800 text-zinc-400"
+                    >
+                      {tag}
+                    </span>
+                  ))}
                 </div>
               </div>
             </Reveal>
@@ -302,14 +325,16 @@ export default function Home() {
                 </h2>
                 <p className="mt-4 text-zinc-400 text-base leading-relaxed">
                   A 90% interval should contain the truth 90% of the time, not
-                  62%, not 99%. SignalLab tracks the Probability Integral
-                  Transform of every prediction, bins it into reliability
-                  diagrams, and reports the weighted calibration error per model
-                  and per horizon.
+                  62%, not 99%. SignalLab runs split conformal prediction on
+                  every training window, sets per-horizon widths from empirical
+                  residual quantiles, and then verifies coverage fold by fold.
+                  The diagonal is the promise; the line is what the model
+                  actually delivered.
                 </p>
                 <ul className="mt-6 space-y-3 text-sm text-zinc-300">
                   {[
-                    "Empirical vs nominal coverage, broken down by horizon step.",
+                    "Split conformal intervals with horizon-specific half-widths.",
+                    "Reliability diagrams from the Probability Integral Transform.",
                     "Rolling-window coverage so you can see drift as it happens.",
                     "Pinball loss at the lower and upper prediction quantiles.",
                   ].map((point) => (
@@ -325,10 +350,9 @@ export default function Home() {
               </Reveal>
 
               <Reveal delay={100} className="lg:col-span-3">
-                <HorizonChart
-                  horizons={airline.horizons}
-                  metric="smape"
-                  title="sMAPE by forecast horizon"
+                <ReliabilityChart
+                  records={airlineRecs}
+                  availableModels={BENCHMARK_MODELS}
                 />
                 <div className="mt-6 grid grid-cols-2 sm:grid-cols-4 gap-3">
                   {airline.overall
@@ -383,12 +407,7 @@ export default function Home() {
                 <CoverageChart
                   rollingCoverage={shift.rolling_coverage}
                   target={1 - shift.meta.alpha}
-                  shiftIndex={Math.max(
-                    0,
-                    Math.floor(
-                      (220 - shift.meta.initial_train) / shift.meta.step,
-                    ),
-                  )}
+                  shiftIndex={computeShiftFoldIndex(shift.meta)}
                 />
               </div>
             </Reveal>

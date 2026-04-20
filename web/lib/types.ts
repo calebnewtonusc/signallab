@@ -36,6 +36,9 @@ export interface ResultsFile {
     alpha: number;
     seasonality: number;
     models: string[];
+    n_folds: number;
+    conformal: boolean;
+    calibration_folds: number;
   };
   overall: OverallSummary[];
   horizons: HorizonSummary[];
